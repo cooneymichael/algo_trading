@@ -21,6 +21,10 @@ using a rebase.
 This code relies on a sqlite database to store and retrieve information.  The schema of
 that database is recorded below:
 
+```sql
 CREATE TABLE IF NOT EXISTS "Securities" (SecurityID INTEGER PRIMARY KEY, SecurityTicker TEXT NOT NULL, SecurityName TEXT, SharesOwned, UNIQUE (SecurityTicker));
+```
 
+```sql
 CREATE TABLE IF NOT EXISTS "History" (SecurityID INTEGER NOT NULL, Datetime TEXT NOT NULL, Open REAL NOT NULL, High REAL NOT NULL, Low REAL NOT NULL, Close REAL NOT NULL, Volume INTEGER NOT NULL, OpenInt REAL NOT NULL, FOREIGN KEY (SecurityID) REFERENCES Securities (SecurityID), PRIMARY KEY(SecurityID, Datetime));
+```
