@@ -65,8 +65,8 @@ def calculate_markov_chain(data: pd.DataFrame) -> list[list[float]]:
         prev_price = it.value
 
     # iterate over the prices, tracking gains and losses
-    # closing_prices = data.values.flatten()
-    closing_prices = np.array([1,2,3,2,3,1])
+    closing_prices = data.values.flatten()
+    # closing_prices = np.array([1,2,3,2,3,1])
     it = np.nditer(closing_prices)
     prev_price = it.value
     it.iternext()
