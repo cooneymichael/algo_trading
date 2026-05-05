@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import sqlite3
@@ -121,14 +122,16 @@ def random_walk(markov_chain: list[list[float]], depth: int, initial_state: int)
             if state_pointer != new_state:
                 state_pointer = new_state
 
-            if new_state:
+            # logic is inverted (gain = 0) because matrix is 0-indexed
+            if not new_state:
                 counter += 1
             else:
                 counter -= 1
 
             simulations[idx][i] = counter
 
-    return simulations
+    simulation = np.average(simulations, axis=0)
+    return simulation
 
 if __name__ == '__main__':
     # ewy_history = get_security_history('EWY', 2012)
@@ -138,4 +141,9 @@ if __name__ == '__main__':
     # print(mc)
 
     pts = random_walk([[2/3,1/3],[3/4, 1/4]], 1000, 0)
+    # pts = random_walk([[1,0],[1, 0]], 1000, 0)
+    pts = pd.Series(pts)
     print(pts)
+    pts.plot()
+    plt.show()
+
