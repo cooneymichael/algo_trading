@@ -1,7 +1,26 @@
 import pandas as pd
 import unittest
 
-from mcmc import calculate_markov_chain, random_walk
+from mcmc import calculate_markov_chain, random_walk, calculate_price_move_distribution
+
+class TestCalculatePriceMoveDistribution(unittest.TestCase):
+    def test_basic(self):
+        '''calculate_price_move_distribition: test a standard input'''
+
+        
+        data = pd.DataFrame(data=[10, 10.3, 10.8, 10.6, 10, 11, 12, 12, \
+                                  12.5, 12.25, 12.58, 12.18, 17.18, 14.18])
+
+        correct_answers = {'large gain': [5],
+                           'small gain': [0.3, 0.5, 1, 1, 0.5, 0.33],
+                           'no movement': [0],
+                           'small loss': [-0.2, -0.6, -0.25, -0.4],
+                           'large loss': [-3]}
+
+        bins, pom = calculate_price_move_distribution(data)
+
+        for b in bins:
+            self.assertEqual(bins[b], correct_answers[b])
 
 
 class TestCalculateMarkovChain(unittest.TestCase):
