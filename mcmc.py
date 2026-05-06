@@ -41,6 +41,50 @@ def get_security_history(ticker: str, start: int=None) -> pd.DataFrame:
     return data
 
 
+def calculate_price_move_distribution(data: pd.DataFrame) -> dict[str: list[float]] and np.array:
+    '''Calculate the distribution of price movements for the input security.'''
+
+    price_movements = np.zeros(shape=data.shape[0]-1)
+    closing_prices = data.values.flatten()
+    for i in range(1, len(closing_prices)):
+        price_movements[i-1] = np.around(closing_prices[i] - closing_prices[i-1], 2)
+
+    # categorize price movements by standard deviation
+    bins = {
+        'large gain': [],
+        'small gain': [],
+        'no movement': [],
+        'small loss': [],
+        'large loss': [],
+    }
+
+    # we only care about the magnitude of price movement, not cardinality
+    price_movements_pos = list(map(lambda x: abs(x), price_movements))
+    stddev = np.std(price_movements_pos)
+    del price_movements_pos
+
+    for i in price_movements:
+        if i == 0:
+            bins['no movement'].append(i)
+        elif abs(i) >= stddev*2:
+            if i > 0:
+                bins['large gain'].append(i)
+            else:
+                bins['large loss'].append(i)
+        else:
+            if i > 0:
+                bins['small gain'].append(i)
+            else:
+                bins['small loss'].append(i)
+
+    # calculate probability of each category being sampled
+    probability_of_movements = np.zeros(shape=5)
+    for i, k in enumerate(bins.keys()):
+        probability_of_movements[i] = len(bins[k]) / len(price_movements)
+
+    return bins, probability_of_movements
+
+
 def calculate_markov_chain(data: pd.DataFrame) -> list[list[float]]:
     '''Calculate a markov chain probability matrix/state diagram using the data parameter.
     The result will have the form:
@@ -137,13 +181,16 @@ if __name__ == '__main__':
     # ewy_history = get_security_history('EWY', 2012)
     # print(ewy_history)
 
+    # d = pd.DataFrame(data=[1, 1.5, 5, 3, 4, 5, 6, 4.75])
+    # dist, pom = calculate_price_move_distribution(d)
+
     # mc = calculate_markov_chain('a')
     # print(mc)
 
-    pts = random_walk([[2/3,1/3],[3/4, 1/4]], 1000, 0)
-    # pts = random_walk([[1,0],[1, 0]], 1000, 0)
-    pts = pd.Series(pts)
-    print(pts)
-    pts.plot()
-    plt.show()
+    # pts = random_walk([[2/3,1/3],[3/4, 1/4]], 1000, 0)
+    # # pts = random_walk([[1,0],[1, 0]], 1000, 0)
+    # pts = pd.Series(pts)
+    # print(pts)
+    # pts.plot()
+    # plt.show()
 
