@@ -41,50 +41,6 @@ def get_security_history(ticker: str, start: int=None) -> pd.DataFrame:
     return data
 
 
-def calculate_price_move_distribution(data: pd.DataFrame) -> dict[str: list[float]] and np.array:
-    '''Calculate the distribution of price movements for the input security.'''
-
-    price_movements = np.zeros(shape=data.shape[0]-1)
-    closing_prices = data.values.flatten()
-    for i in range(1, len(closing_prices)):
-        price_movements[i-1] = np.around(closing_prices[i] - closing_prices[i-1], 2)
-
-    # categorize price movements by standard deviation
-    bins = {
-        'large gain': [],
-        'small gain': [],
-        'no movement': [],
-        'small loss': [],
-        'large loss': [],
-    }
-
-    # we only care about the magnitude of price movement, not cardinality
-    price_movements_pos = list(map(lambda x: abs(x), price_movements))
-    stddev = np.std(price_movements_pos)
-    del price_movements_pos
-
-    for i in price_movements:
-        if i == 0:
-            bins['no movement'].append(i)
-        elif abs(i) >= stddev*2:
-            if i > 0:
-                bins['large gain'].append(i)
-            else:
-                bins['large loss'].append(i)
-        else:
-            if i > 0:
-                bins['small gain'].append(i)
-            else:
-                bins['small loss'].append(i)
-
-    # calculate probability of each category being sampled
-    probability_of_movements = np.zeros(shape=5)
-    for i, k in enumerate(bins.keys()):
-        probability_of_movements[i] = len(bins[k]) / len(price_movements)
-
-    return bins, probability_of_movements
-
-
 def get_state(movement: float, stddev: float) -> str:
     '''Convert a price movement into a categorical state.'''
     if movement == 0.00:
@@ -142,6 +98,28 @@ def get_coordinates_from_state(state:str) -> int:
             raise ValueError('This is not a valid state for a Markov Chain')
         
 
+def calculate_price_move_distribution(data: pd.DataFrame) -> dict[str: list[float]]:
+    '''Calculate the distribution of price movements for the input security.'''
+
+
+    price_movements = get_price_movements(data)
+    # categorize price movements by standard deviation
+    bins = {
+        'no movement': [],
+        'large gain': [],
+        'small gain': [],
+        'small loss': [],
+        'large loss': [],
+    }
+
+    stddev = get_standard_deviation_of_movement(price_movements)
+
+    for movement in price_movements:
+        current_state = get_state(movement, stddev)
+        bins[current_state].append(movement)
+    
+    return bins
+
 
 def calculate_markov_chain(data: pd.DataFrame) -> np.ndarray:
     '''Calculate a markov chain probability matrix/state diagram using the data parameter.
@@ -188,12 +166,16 @@ def calculate_markov_chain(data: pd.DataFrame) -> np.ndarray:
     return markov_chain
 
 
-def monte_carlo_sim(markov_chain: list[list[float]], depth: int, initial_state: int) -> list[float]:
+def monte_carlo_sim(markov_chain: list[list[float]],\
+                    movements_distribution: dict[str: list[float]],\
+                    last_price: float,\
+                    depth: int,\
+                    initial_state: int) -> list[float]:
     '''Average a list of points over thousands of random walks.  Points should
     be real numbers. Return the averaged list to be visualized or analyzed.
 
     key word arguments:
-    markov_chain --  a 2x2 matrix holding probabilities for gains and losses
+    markov_chain --  a 5x5 matrix holding probabilities for gains and losses
     depth --         the number of future events to simulate
     initial_state -- a pointer to a row in markov_chain. 0 represents a gain, 1 represents a loss
     '''
@@ -203,46 +185,45 @@ def monte_carlo_sim(markov_chain: list[list[float]], depth: int, initial_state: 
 
     for idx, _ in enumerate(simulations):
         state_pointer = initial_state
-        counter = 0
+        # counter = 0
+        simulated_price = last_price
 
         for i in range(depth):
-            new_state = np.random.choice([0,1], p=markov_chain[state_pointer])
+            new_state = np.random.choice([0, 1, 2, 3, 4], p=markov_chain[state_pointer])
             if state_pointer != new_state:
                 state_pointer = new_state
 
-            # logic is inverted (gain = 0) because matrix is 0-indexed
-            if not new_state:
-                counter += 1
-            else:
-                counter -= 1
+            relevant_price_move_dist = list(movements_distribution.values())[new_state]
+            price_change = np.random.choice(relevant_price_move_dist)
+            simulated_price += price_change
 
-            simulations[idx][i] = counter
+            # logic is inverted (gain = 0) because matrix is 0-indexed
+            # if not new_state:
+            #     counter += 1
+            # else:
+            #     counter -= 1
+
+            simulations[idx][i] = simulated_price
 
     simulation = np.average(simulations, axis=0)
     return simulation
 
 if __name__ == '__main__':
     
-    # ewy_history = get_security_history('EWY', 2012)
-    # print(ewy_history)
+    ewy_history = get_security_history('EWY', 2012)
+    print(ewy_history)
 
     # d = pd.DataFrame(data=[10, 10, 11, 11.5, 6.5, 3.5, 7.5, 12.5, 18.5, 13.75])
-    d = pd.DataFrame(data=[10, 10, 11, 12.5, 7.5, 4.5, 8.5, 13.5, 19.5, 14.75])
-    dist, pom = calculate_price_move_distribution(d)
+    # d = pd.DataFrame(data=[10, 10, 11, 12.5, 7.5, 4.5, 8.5, 13.5, 19.5, 14.75])
+    dist = calculate_price_move_distribution(ewy_history)
+    mc = calculate_markov_chain(ewy_history)
 
-    for i in dist:
-        print(i, dist[i])
-    print()
-
-    print('================================================================================')
-
-    mc = calculate_markov_chain(d)
-    print(mc)
+    last_price = ewy_history['Close'].tail(n=1).values[0]
 
     # pts = random_walk([[2/3,1/3],[3/4, 1/4]], 1000, 0)
-    # # pts = random_walk([[1,0],[1, 0]], 1000, 0)
-    # pts = pd.Series(pts)
-    # print(pts)
-    # pts.plot()
-    # plt.show()
+    pts = monte_carlo_sim(mc, dist, last_price, 1000, 0)
+    pts = pd.Series(pts)
+    print(pts)
+    pts.plot()
+    plt.show()
 
