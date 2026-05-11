@@ -17,7 +17,7 @@ class TestCalculatePriceMoveDistribution(unittest.TestCase):
                            'small loss': [-0.2, -0.6, -0.25, -0.4],
                            'large loss': [-3]}
 
-        bins, pom = calculate_price_move_distribution(data)
+        bins = calculate_price_move_distribution(data)
 
         for b in bins:
             self.assertEqual(bins[b], correct_answers[b])
