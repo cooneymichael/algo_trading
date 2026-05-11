@@ -1,7 +1,7 @@
 import pandas as pd
 import unittest
 
-from mcmc import calculate_markov_chain, random_walk, calculate_price_move_distribution
+from mcmc import calculate_markov_chain, monte_carlo_sim, calculate_price_move_distribution
 
 class TestCalculatePriceMoveDistribution(unittest.TestCase):
     def test_basic(self):
@@ -26,37 +26,65 @@ class TestCalculatePriceMoveDistribution(unittest.TestCase):
 class TestCalculateMarkovChain(unittest.TestCase):
     def test_basic(self):
         '''calculate_markov_chain: check for expected result from model input'''
-        data = pd.DataFrame(data=[1,2,3,2,3,1])
-        self.assertEqual(calculate_markov_chain(data), [[1/3, 2/3],[1,0]])
+        d = pd.DataFrame(data=[10, 10, 11, 12.5, 7.5, 4.5, 8.5, 13.5, 19.5, 14.75])
+        expected = [[0, 0, 1, 0, 0],\
+                    [0, 2/3, 0, 0, 1/3],\
+                    [0, 0, 1/2, 0, 1/2],\
+                    [0, 1, 0, 0, 0],\
+                    [0, 0, 0, 1, 0]]
+        result = calculate_markov_chain(d)
+        
+        for i in range(len(result)):
+            self.assertListEqual(list(result[i]), expected[i])
+        return
 
-    def test_all_states_present(self):
-        '''calculate_markov_chain: check that function works properly when all
-        elements of the matrix are non-zero'''
-        data = pd.DataFrame(data=[1,2,3,7,5,4,6])
-        self.assertEqual(calculate_markov_chain(data), [[2/3, 1/3], [1/2, 1/2]])
-    
     def test_always_gain(self):
         '''calculate_markov_chain: edge case when price data always increases (divide by 0)'''
-        data = pd.DataFrame(data=[1,2,3,4,5,6,7])
-        self.assertEqual(calculate_markov_chain(data), [[1,0],[0,0]])
+        d = pd.DataFrame(data=[10, 11, 12.5, 17.5, 20.5, 24.5, 29.5, 35.5, 40.25])
+        expected = [[0, 0, 0, 0, 0],\
+                    [0, 3/4, 1/4, 0, 0],\
+                    [0, 2/3, 1/3, 0, 0],\
+                    [0, 0, 0, 0, 0],\
+                    [0, 0, 0, 0, 0]]
+        result = calculate_markov_chain(d)
+
+        for i in range(len(result)):
+            self.assertListEqual(list(result[i]), expected[i])            
+        return
 
     def test_always_lose(self):
         '''calculate_markov_chain: edge case when price data always decreases (divide by 0)'''
-        data = pd.DataFrame(data=[7,6,5,4,3,2,1])
-        self.assertEqual(calculate_markov_chain(data), [[0,0],[0,1]])
+        d = pd.DataFrame(data=[41, 40, 38.5, 33.5, 30.5, 26.5, 21.5, 15.5, 10.75])
+        expected = [[0, 0, 0, 0, 0],\
+                    [0, 0, 0, 0, 0],\
+                    [0, 0, 0, 0, 0],\
+                    [0, 0, 0, 1/3, 2/3],\
+                    [0, 0, 0, 1/4, 3/4]]
+        result = calculate_markov_chain(d)
+
+        for i in range(len(result)):
+            self.assertListEqual(list(result[i]), expected[i])            
+        return
 
     def test_no_movement(self):
         '''calculate_markov_chain: edge case where the data never increases or decreases'''
-        data = pd.DataFrame(data=[1,1,1,1,1,1,1])
-        # current expected behavior: treated as a gain
-        self.assertEqual(calculate_markov_chain(data), [[1,0],[0,0]])
-        
+        d = pd.DataFrame(data=[10, 10, 10, 10, 10, 10])
+        expected = [[1, 0, 0, 0, 0],\
+                    [0, 0, 0, 0, 0],\
+                    [0, 0, 0, 0, 0],\
+                    [0, 0, 0, 0, 0],\
+                    [0, 0, 0, 0, 0]]
+        result = calculate_markov_chain(d)
 
-class TestRandomWalk(unittest.TestCase):
+        for i in range(len(result)):
+            self.assertListEqual(list(result[i]), expected[i])
+        return
+
+class TestMonteCarloSim(unittest.TestCase):
     def test_always_gain(self):
         '''random_walk: edge case where markov chain has form [[1,0],[0,0]] '''
         depth = 100
-        pts = random_walk([[1,0], [0,0]], depth, 0)
+        pts = monte_carlo_sim([[1,0], [0,0]], depth, 0)
 
         # we cannot directly compare python lists, so we compare elementwise instead
         verification = list(map(lambda x: x[0] == x[1], zip(pts, range(1, depth+1))))
@@ -65,7 +93,7 @@ class TestRandomWalk(unittest.TestCase):
     def test_always_loss(self):
         '''random_walk: edge case where markov chain has form [[0,0], [0,1]]'''
         depth = 100
-        pts = random_walk([[0,0], [0,1]], depth, 1)
+        pts = monte_carlo_sim([[0,0], [0,1]], depth, 1)
 
         verification = list(map(lambda x: x[0] == x[1], zip(pts, range(-1, -depth-1, -1))))
         self.assertTrue(all(verification))
