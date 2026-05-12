@@ -22,24 +22,55 @@ import sys
 
 DB_PATH = '../Data/Data/stocks.db'
 
-def get_security_history(ticker: str, start: int=None) -> pd.DataFrame:
-    '''Get the closing price history of a ticker, either for all time or beginning
-    from start up to the most recent data.  If start is more specific than a year
-    then it should be in the format yyyy-mm-dd.  Data is return in a pandas dataframe'''
-    con = sqlite3.connect(DB_PATH)
 
-    query = f'SELECT Datetime, Close FROM History WHERE SecurityId =\
-    (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'{ticker}\')'
+class Security():
+    def __init__(self, ticker: str, db_path: str):
+        self.ticker = ticker
+        self.db_path = db_path
+        self.history = None
+        self.history_start = None
 
-    if start is not None:
-        query += f' AND Datetime > {str(start)}'
-    query += ';'
+    def get_history(self, start: int=None) -> pd.DataFrame:
+        # we have never gotten the history for this security
+        if self.history is None:
+            self.history = self._get_history_from_db(start)
+            self.history_start = self.history.index[0]
 
-    data = pd.read_sql(query, con, index_col='Datetime')
-    con.close()
-    
-    return data
+        # we got the history previously, but we need more history
+        elif start is not None and start < self.history_start:
+            new_data = self._get_history_from_db(start=start, end=self.history_start)
+            self.history = pd.concat([new_data, self.history])
+            self.history_start = start
+        
+        # we got the history previously, and we only want a subset of it now
+        elif start is not None and start > self.history_start:
+            return self.history.index.date > np.datetime64(start)
+        
+        return self.history
 
+
+    def _get_history_from_db(self, start: int=None, end: int=None) -> pd.DataFrame:
+        '''Helper function to retrieve information from a sqlite 3 DB'''
+
+        con = sqlite3.connect(self.db_path)
+        query = f'SELECT Datetime, Close FROM History WHERE SecurityId =\
+        (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'{self.ticker}\')'
+
+        if start is not None:
+            query += f' AND Datetime > {str(start)}'
+
+        if end is not None:
+            query += f' AND Datetime < {str(end)}'
+
+        query += ';'
+
+        data = pd.read_sql(query, con, index_col='Datetime')
+        con.close()
+
+        return data
+
+    def __str__(self):
+        return f'Instance of Security: {self.ticker}'
 
 def get_state(movement: float, stddev: float) -> str:
     '''Convert a price movement into a categorical state.'''
@@ -210,20 +241,25 @@ def monte_carlo_sim(markov_chain: list[list[float]],\
 
 if __name__ == '__main__':
     
-    ewy_history = get_security_history('EWY', 2012)
+    # ewy_history = get_security_history('EWY', 2012)
+    # print(ewy_history)
+
+    ewy = Security('EWY', DB_PATH)
+    ewy_history = ewy.get_history(2012)
+    print(ewy)
     print(ewy_history)
 
-    # d = pd.DataFrame(data=[10, 10, 11, 11.5, 6.5, 3.5, 7.5, 12.5, 18.5, 13.75])
-    # d = pd.DataFrame(data=[10, 10, 11, 12.5, 7.5, 4.5, 8.5, 13.5, 19.5, 14.75])
-    dist = calculate_price_move_distribution(ewy_history)
-    mc = calculate_markov_chain(ewy_history)
+    # # d = pd.DataFrame(data=[10, 10, 11, 11.5, 6.5, 3.5, 7.5, 12.5, 18.5, 13.75])
+    # # d = pd.DataFrame(data=[10, 10, 11, 12.5, 7.5, 4.5, 8.5, 13.5, 19.5, 14.75])
+    # dist = calculate_price_move_distribution(ewy_history)
+    # mc = calculate_markov_chain(ewy_history)
 
-    last_price = ewy_history['Close'].tail(n=1).values[0]
+    # last_price = ewy_history['Close'].tail(n=1).values[0]
 
-    # pts = random_walk([[2/3,1/3],[3/4, 1/4]], 1000, 0)
-    pts = monte_carlo_sim(mc, dist, last_price, 1000, 0)
-    pts = pd.Series(pts)
-    print(pts)
-    pts.plot()
-    plt.show()
+    # # pts = random_walk([[2/3,1/3],[3/4, 1/4]], 1000, 0)
+    # pts = monte_carlo_sim(mc, dist, last_price, 1000, 0)
+    # pts = pd.Series(pts)
+    # print(pts)
+    # pts.plot()
+    # plt.show()
 
