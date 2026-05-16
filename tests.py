@@ -1,9 +1,300 @@
+import datetime as dt
+from unittest.mock import patch
 import pandas as pd
+import sqlite3
 import unittest
+from unittest.mock import Mock, MagicMock, call
+import yfinance as yf
+
+import mcmc
 
 from mcmc import calculate_markov_chain, monte_carlo_sim, calculate_price_move_distribution
 
+from mcmc import Security
+
+
+SKIP_FETCH_UPDATED_DATA = False
+SKIP_PRICE_MOVE_DISTRIBUTION = True
+SKIP_CALCULATE_MARKOV_CHAIN = True
+SKIP_MONTE_CARLO_SIM = True
+
+
+# class MockDatetime(dt.datetime):
+    
+#     _fixed: dt.datetime = None
+
+#     @classmethod
+#     def today(self):
+#         return self._fixed
+
+
+class TestFetchUpdatedData(unittest.TestCase):
+    def setUp(self):
+        '''Security.fetch_updated_data: test'''
+        self.security = Security('TEST', 'fake/db/path')
+
+        # create a fake date that we will use for 'today'
+        self.mock_today_date = dt.datetime(2025, 5, 4, 16, 0, 0)
+
+        # subclass the dt.datetime class to return a valid datetime with the mock date
+        class MockDatetime(dt.datetime):
+            # def __init__(self, dt):
+            #     today = MagicMock(return_value=dt)
+            _fixed  = self.mock_today_date
+            today = MagicMock(return_value=_fixed)
+
+        # mock the modules needed to complete the function call chain
+        self.mock_dt_module = MagicMock()
+        self.mock_dt_module.datetime = MockDatetime
+
+        # save the original datetime module for teardown, replace the original
+        # with the mock 
+        self._orig_dt = mcmc.dt
+        mcmc.dt = self.mock_dt_module
+
+
+        
+        ################################################################################
+        # repeat the above for the sqlite3 connection
+        ################################################################################
+
+        self.mock_sqlite3 = MagicMock(spec=sqlite3)
+        self.mock_con = MagicMock()
+        self.mock_cursor = MagicMock()
+        self.mock_cursor_exec = MagicMock()
+        
+        # the mock sqlite3 connect method returns the mock con
+        self.mock_sqlite3.connect.return_value = self.mock_con
+
+        # the mock con returns the mock cursor
+        self.mock_con.cursor.return_value = self.mock_cursor
+
+        # the sql code being tested: cur.execute(...).fetchone()
+        # execute returns an instance of cursor here, so we need to mock it and
+        # redirect its return to the mock cursor, otherwise it will be none and
+        # our mock will not work
+        self.mock_cursor.execute.return_value = self.mock_cursor
+        self.mock_cursor.fetchone.return_value = 'Mock con.cur.execute.fetchon function chain called'
+
+        # replace the module sqlite3 con with our mock con
+        self._orig_sqlite3 = mcmc.sqlite3
+        mcmc.sqlite3 = self.mock_sqlite3
+
+
+        ################################################################################
+        # repeat the above for the yfinance module
+        ################################################################################
+        mock_yf_data = pd.DataFrame(columns = ['Date', 'Open', 'High', 'Low', \
+                                               'Close', 'Adj Close', 'Volume', \
+                                               'Dividends', 'Stock Splits'], \
+                                    data = [['2025-05-01', 182.50, 184.12, 180.10, 183.04, 183.04, 34163779, 0.00, 0.00],
+                                            ['2025-05-02', 184.10, 185.07, 183.29, 183.39, 183.39, 41386755, 0.00, 0.00],
+                                            ['2025-05-05', 183.75, 186.05, 181.83, 181.92, 181.92, 44187566, 0.25, 0.00],
+                                            ['2025-05-06', 185.20, 188.20, 184.28, 184.99, 184.99, 22951921, 0.00, 0.00],
+                                            ['2025-05-07', 186.00, 187.41, 184.45, 185.73, 185.73, 25863186, 0.00, 0.00],
+                                            ['2025-05-08', 184.90, 187.24, 184.12, 185.03, 185.03, 27891769, 0.00, 0.00]])
+        mock_yf_data.set_index('Date', inplace=True)
+
+        self.mock_yf = MagicMock(spec=yf)
+        self.mock_yf_ticker = MagicMock()
+        self.mock_yf.Ticker.return_value = self.mock_yf_ticker
+
+        # self.mock_ticker_history = MagicMock()
+        self.mock_yf_ticker.history.return_value = mock_yf_data
+
+        # save original and replace with mock
+        self._orig_yf = mcmc.yf
+        mcmc.yf = self.mock_yf
+
+        return
+
+    
+    def tearDown(self):
+        mcmc.dt = self._orig_dt
+        mcmc.sqlite3 = self._orig_sqlite3
+        mcmc.yf = self._orig_yf
+
+        
+    # @unittest.skip('Not implemented yet')
+    @unittest.skipIf(SKIP_FETCH_UPDATED_DATA, 'Test was not selected to run.')
+    def test_fetch_data_no_start_date(self):
+        '''Security.fetch_updated_data: check if the function retrieves new data
+        when Security.start_date is not set'''
+
+        self.mock_cursor.fetchone.side_effect = [['2025-05-01'], ['1']]
+        self.security.fetch_updated_data()
+        
+        self.mock_cursor.execute.assert_any_call('SELECT Datetime FROM History WHERE SecurityId = \
+            (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'TEST\')\
+            ORDER BY Datetime DESC LIMIT 1;')
+        self.mock_yf_ticker.history.assert_called_once()
+        self.mock_cursor.execute.assert_any_call('SELECT SecurityId FROM Securities WHERE \
+            SecurityTicker = \'TEST\'')
+        self.mock_con.commit.assert_called_once()
+        self.assertIsNone(self.security.history)
+        self.assertIsNone(self.security.history_start)
+        return
+
+    
+    @unittest.skipIf(SKIP_FETCH_UPDATED_DATA, 'Test was not selected to run.')
+    def test_fetch_data_with_start_date(self):
+        '''Security.fetch_updated_data: check if the function retrieves subset of
+        new data when Security.start_date is set'''
+
+        self.security.history = pd.DataFrame(columns = ['Date', 'Close'],\
+                                    data = [['2025-04-01', 177.46],
+                                            ['2025-04-02', 180.78],
+                                            ['2025-04-03', 178.01],
+                                            ['2025-04-04', 180.12]])
+        self.security.history.set_index('Date', inplace=True)
+        self.security.history_start = '2025-04-01'
+        self.security.fetch_updated_data()
+
+
+        # Assertions
+        correct_history = pd.DataFrame(columns = ['Date', 'Close'],\
+                                       data = [['2025-04-01', 177.46],
+                                               ['2025-04-02', 180.78],
+                                               ['2025-04-03', 178.01],
+                                               ['2025-04-04', 180.12],
+                                               ['2025-05-01', 183.04],
+                                               ['2025-05-02', 183.39],
+                                               ['2025-05-05', 181.92],
+                                               ['2025-05-06', 184.99],
+                                               ['2025-05-07', 185.73],
+                                               ['2025-05-08', 185.03]])
+        correct_history.set_index('Date', inplace=True)
+
+
+
+        assert call('SELECT Datetime FROM History WHERE SecurityId = \
+            (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'TEST\')\
+            ORDER BY Datetime DESC LIMIT 1;') not in self.mock_cursor.execute.mock_calls
+        self.mock_yf_ticker.history.assert_called_once()
+        self.mock_cursor.execute.assert_any_call('SELECT SecurityId FROM Securities WHERE \
+            SecurityTicker = \'TEST\'')
+        self.mock_con.commit.assert_called_once()
+
+        self.assertIsNone(pd.testing.assert_frame_equal(self.security.history, correct_history))
+        return
+    
+    @unittest.skipIf(SKIP_FETCH_UPDATED_DATA, 'Test was not selected to run.')
+    def test_fetch_data_saturday_and_thursday(self):
+        '''Security.fetch_updated_data: check if the function retrieves new data
+        when the last updated date is Thursday and today is Saturday'''
+        
+        self.mock_cursor.fetchone.side_effect = [['2025-05-01'], ['1']]
+        self.mock_dt_module.datetime.today.return_value = dt.datetime(2025, 5, 3, 12, 0, 0)
+        self.security.fetch_updated_data()
+
+        # assertions
+        self.mock_cursor.execute.assert_any_call('SELECT Datetime FROM History WHERE SecurityId = \
+            (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'TEST\')\
+            ORDER BY Datetime DESC LIMIT 1;')
+        self.mock_dt_module.datetime.today.assert_called()
+        self.mock_yf_ticker.history.assert_called_once()
+        self.mock_cursor.execute.assert_any_call('SELECT SecurityId FROM Securities WHERE \
+            SecurityTicker = \'TEST\'')
+        self.mock_con.commit.assert_called_once()
+
+        self.assertIsNone(self.security.history)
+        self.assertIsNone(self.security.history_start)
+        return
+
+
+    @unittest.skipIf(SKIP_FETCH_UPDATED_DATA, 'Test was not selected to run.')
+    def test_fetch_data_saturday_and_friday(self):
+        '''Security.fetch_updated_data: check if the function returns an error
+        when the last updated date is Friday and today is Saturday'''
+
+        self.mock_cursor.fetchone.side_effect = [['2025-05-02'], ['1']]
+        self.mock_dt_module.datetime.today.return_value = dt.datetime(2025, 5, 3, 16, 0, 0)
+        should_be_error = self.security.fetch_updated_data()
+
+        self.assertTrue(type(should_be_error) == mcmc.NoNewDataError)
+        self.mock_cursor.execute.assert_called_once()
+        self.mock_dt_module.datetime.today.assert_called()
+
+        self.mock_yf_ticker.history.assert_not_called()
+        self.mock_con.commit.assert_not_called()
+        return
+
+
+    @unittest.skipIf(SKIP_FETCH_UPDATED_DATA, 'Test was not selected to run.')
+    def test_fetch_data_sunday_and_friday(self):
+        '''Security.fetch_updated_data: check if the function returns an error
+        when the last updated date is Friday and today is Sunday'''
+
+        self.mock_cursor.fetchone.side_effect = [['2025-05-02'], ['1']]
+        self.mock_dt_module.datetime.today.return_value = dt.datetime(2025, 5, 4, 12, 0, 0)
+        should_be_error = self.security.fetch_updated_data()
+
+        self.assertTrue(type(should_be_error) == mcmc.NoNewDataError)
+        self.mock_cursor.execute.assert_called_once()
+        self.mock_dt_module.datetime.today.assert_called()
+
+        self.mock_yf_ticker.history.assert_not_called()
+        self.mock_con.commit.assert_not_called()
+        return
+
+
+    @unittest.skipIf(SKIP_FETCH_UPDATED_DATA, 'Test was not selected to run.')
+    def test_fetch_data_holiday(self):
+        '''Security.fetch_updated_data: check if the function returns an error
+        when today is a holiday and timedelta is less than one'''
+
+        self.mock_cursor.fetchone.side_effect = [['2025-07-03'], ['1']]
+        self.mock_dt_module.datetime.today.return_value = dt.datetime(2025, 7, 4, 12, 0, 0)
+        should_be_error = self.security.fetch_updated_data()
+
+        self.assertTrue(type(should_be_error) == mcmc.NoNewDataError)
+        self.mock_cursor.execute.assert_called_once()
+        self.mock_dt_module.datetime.today.assert_called()
+
+        self.mock_yf_ticker.history.assert_not_called()
+        self.mock_con.commit.assert_not_called()
+        return
+
+
+    @unittest.skipIf(SKIP_FETCH_UPDATED_DATA, 'Test was not selected to run.')
+    def test_fetch_data_market_open(self):
+        '''Security.fetch_updated_data: check if the function returns an error
+        when today's market is still open and timedelta is less than one day'''
+
+        self.mock_cursor.fetchone.side_effect = [['2025-05-01'], ['1']]
+        self.mock_dt_module.datetime.today.return_value = dt.datetime(2025, 5, 2, 12, 0, 0)
+        should_be_error = self.security.fetch_updated_data()
+
+        self.assertTrue(type(should_be_error) == mcmc.NoNewDataError)
+        self.mock_cursor.execute.assert_called_once()
+        self.mock_dt_module.datetime.today.assert_called()
+
+        self.mock_yf_ticker.history.assert_not_called()
+        self.mock_con.commit.assert_not_called()
+        return
+
+
+    @unittest.skipIf(SKIP_FETCH_UPDATED_DATA, 'Test was not selected to run.')
+    def test_fetch_data_same_date(self):
+        '''Security.fetch_updated_data: check if the function returns an error
+        when today and last_date are equal'''
+
+        self.mock_cursor.fetchone.side_effect = [['2025-05-01'], ['1']]
+        self.mock_dt_module.datetime.today.return_value = dt.datetime(2025, 5, 1, 17, 0, 0)
+        should_be_error = self.security.fetch_updated_data()
+
+        self.assertTrue(type(should_be_error) == mcmc.NoNewDataError)
+        self.mock_cursor.execute.assert_called_once()
+        self.mock_dt_module.datetime.today.assert_called()
+
+        self.mock_yf_ticker.history.assert_not_called()
+        self.mock_con.commit.assert_not_called()
+        return
+
+
+
 class TestCalculatePriceMoveDistribution(unittest.TestCase):
+    @unittest.skipIf(SKIP_PRICE_MOVE_DISTRIBUTION, 'Test was not selected to run.')
     def test_basic(self):
         '''calculate_price_move_distribition: test a standard input'''
 
@@ -24,6 +315,7 @@ class TestCalculatePriceMoveDistribution(unittest.TestCase):
 
 
 class TestCalculateMarkovChain(unittest.TestCase):
+    @unittest.skipIf(SKIP_CALCULATE_MARKOV_CHAIN, 'Test was not selected to run.')
     def test_basic(self):
         '''calculate_markov_chain: check for expected result from model input'''
         d = pd.DataFrame(data=[10, 10, 11, 12.5, 7.5, 4.5, 8.5, 13.5, 19.5, 14.75])
@@ -38,6 +330,7 @@ class TestCalculateMarkovChain(unittest.TestCase):
             self.assertListEqual(list(result[i]), expected[i])
         return
 
+    @unittest.skipIf(SKIP_CALCULATE_MARKOV_CHAIN, 'Test was not selected to run.')
     def test_always_gain(self):
         '''calculate_markov_chain: edge case when price data always increases (divide by 0)'''
         d = pd.DataFrame(data=[10, 11, 12.5, 17.5, 20.5, 24.5, 29.5, 35.5, 40.25])
@@ -52,6 +345,7 @@ class TestCalculateMarkovChain(unittest.TestCase):
             self.assertListEqual(list(result[i]), expected[i])            
         return
 
+    @unittest.skipIf(SKIP_CALCULATE_MARKOV_CHAIN, 'Test was not selected to run.')
     def test_always_lose(self):
         '''calculate_markov_chain: edge case when price data always decreases (divide by 0)'''
         d = pd.DataFrame(data=[41, 40, 38.5, 33.5, 30.5, 26.5, 21.5, 15.5, 10.75])
@@ -66,6 +360,8 @@ class TestCalculateMarkovChain(unittest.TestCase):
             self.assertListEqual(list(result[i]), expected[i])            
         return
 
+
+    @unittest.skipIf(SKIP_CALCULATE_MARKOV_CHAIN, 'Test was not selected to run.')
     def test_no_movement(self):
         '''calculate_markov_chain: edge case where the data never increases or decreases'''
         d = pd.DataFrame(data=[10, 10, 10, 10, 10, 10])
@@ -81,6 +377,7 @@ class TestCalculateMarkovChain(unittest.TestCase):
         return
 
 class TestMonteCarloSim(unittest.TestCase):
+    @unittest.skipIf(SKIP_MONTE_CARLO_SIM, 'Test was not selected to run.')
     def test_always_gain(self):
         '''random_walk: edge case where markov chain has form [[1,0],[0,0]] '''
         depth = 100
@@ -90,6 +387,8 @@ class TestMonteCarloSim(unittest.TestCase):
         verification = list(map(lambda x: x[0] == x[1], zip(pts, range(1, depth+1))))
         self.assertTrue(all(verification))
 
+
+    @unittest.skipIf(SKIP_MONTE_CARLO_SIM, 'Test was not selected to run.')
     def test_always_loss(self):
         '''random_walk: edge case where markov chain has form [[0,0], [0,1]]'''
         depth = 100
@@ -99,4 +398,5 @@ class TestMonteCarloSim(unittest.TestCase):
         self.assertTrue(all(verification))
         
 if __name__ == '__main__':
-    unittest.main(verbosity=2)
+    unittest.main(verbosity=3)
+
