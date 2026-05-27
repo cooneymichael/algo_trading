@@ -9,7 +9,7 @@
 
 import datetime as dt
 import holidays
-from errors import NoNewDataError
+from errors import NoNewDataError, InvalidDateFormatError
 import numpy as np
 import pandas as pd
 import sqlite3
@@ -45,21 +45,28 @@ class Security():
             raise e
 
 
-    def get_history(self, start: int=None) -> pd.DataFrame:
+    def get_history(self, start: dt.datetime=None) -> pd.DataFrame | InvalidDateFormatError:
+        '''Get price movement history, either from a database or from the security.history
+        property.'''
+        if start is not None and type(start) != dt.datetime:
+            return InvalidDateFormatError('\'start\' parameter must datetime object')
+
         # we have never gotten the history for this security
         if self.history is None:
-            self.history = self._get_history_from_db(start)
-            self.history_start = self.history.index[0]
+            self.history = self._get_history_from_db(str(start.date()))
+
+            # date is pd.Timestamp here, not np.datetime64
+            self.history_start = str(self.history.index[0].date())
 
         # we got the history previously, but we need more history
-        elif start is not None and start < self.history_start:
-            new_data = self._get_history_from_db(start=start, end=self.history_start)
+        elif start is not None and start < dt.datetime.fromisoformat(self.history_start):
+            new_data = self._get_history_from_db(start=str(start.date()), end=self.history_start)
             self.history = pd.concat([new_data, self.history])
-            self.history_start = start
+            self.history_start = str(start.date())
         
         # we got the history previously, and we only want a subset of it now
-        elif start is not None and start > self.history_start:
-            return self.history.index.date > np.datetime64(start)
+        elif start is not None and start > dt.datetime.fromisoformat(self.history_start):
+            return self.history[self.history.index.date > start.date()]
         
         return self.history
 
@@ -189,3 +196,8 @@ class Security():
         
     def __str__(self):
         return f'Instance of Security: {self.ticker}'
+
+
+if __name__ == '__main__':
+    sec = Security('EWY', '../../Data/Data/stocks.db')
+    sec.get_history()

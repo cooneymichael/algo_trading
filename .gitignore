@@ -1,8 +1,8 @@
 # emacs files
 *~
 \#*\#
+*\#*
 
 # python venv
 algo_trading/*
-
 **__pycache__**
