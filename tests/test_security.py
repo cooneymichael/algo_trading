@@ -8,15 +8,150 @@
 ################################################################################
 
 import datetime as dt
+import numpy as np
 import pandas as pd
 import sqlite3
 import unittest
 from unittest.mock import Mock, MagicMock, call
 import yfinance as yf
 
-from errors import NoNewDataError
+from errors import NoNewDataError, InvalidDateFormatError
 import security as security_module
 from security import Security
+
+
+
+class TestGetHistory(unittest.TestCase):
+    def setUp(self):
+        self.security = Security('TEST', 'fake/db/path')
+
+
+        ################################################################################
+        # Mock pandas
+        ################################################################################
+
+        self.mock_history = pd.DataFrame(columns=['Datetime', 'Close'], \
+                                         data=[[np.datetime64('2025-05-26T04:00:00'), 1.00], \
+                                               [np.datetime64('2025-05-27T04:00:00'), 5.00]])
+        self.mock_history.set_index('Datetime', inplace=True)
+
+        self.mock_pandas = MagicMock(spec=pd)
+        self.mock_pandas.read_sql.return_value = self.mock_history
+        
+        self._orig_pd = security_module.pd
+        security_module.pd = self.mock_pandas
+
+
+        ################################################################################
+        # Mock sqlite3
+        ################################################################################
+
+        self.mock_sqlite3 = MagicMock(spec=sqlite3)
+        self.mock_con = MagicMock()
+        self.mock_cursor = MagicMock()
+        self.mock_cursor_exec = MagicMock()
+        
+        # the mock sqlite3 connect method returns the mock con
+        self.mock_sqlite3.connect.return_value = self.mock_con
+
+        # the mock con returns the mock cursor
+        self.mock_con.cursor.return_value = self.mock_cursor
+
+        self.mock_cursor.execute.return_value = self.mock_cursor
+        self.mock_cursor.fetchone.return_value = 'Mock con.cur.execute.fetchon function chain called'
+
+        # replace the module sqlite3 con with our mock con
+        self._orig_sqlite3 = security_module.sqlite3
+        security_module.sqlite3 = self.mock_sqlite3
+
+
+    def tearDown(self):
+        security_module.sqlite3 = self._orig_sqlite3
+        security_module.pd = self._orig_pd
+
+
+    def test_self_history_is_none(self):
+        '''Security.get_history: self.history is none and we need to fetch from db'''
+
+        # preliminary checks
+        self.assertIsNone(self.security.history)
+        self.assertIsNone(self.security.history_start)
+
+        history = self.security.get_history(dt.datetime.fromisoformat('2025-01-01'))
+        
+        self.assertFalse(type(history) == InvalidDateFormatError)
+        self.mock_pandas.read_sql.assert_called_with('SELECT Datetime, Close FROM History WHERE SecurityId =\
+        (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'TEST\') AND Datetime > 2025-01-01;', \
+        self.mock_con, index_col='Datetime')
+
+        self.assertIsNone(pd.testing.assert_frame_equal(self.security.history, self.mock_history))
+        self.assertTrue(self.security.history_start == '2025-05-26')
+        return
+
+    
+    def test_request_earlier_date(self):
+        '''Security.get_history: self.history is not none but we need to fetch
+        earlier data from db'''
+
+        preliminary_mock_data = pd.DataFrame(columns=['Datetime', 'Close'], data=[['2026-01-01', 1.00], ['2026-01-02', 5.00]])
+        preliminary_mock_data.set_index('Datetime')
+        self.security.history_start = '2026-01-01'
+        self.security.history = preliminary_mock_data
+
+        # preliminary checks
+        self.assertIsNone(pd.testing.assert_frame_equal(self.security.history, preliminary_mock_data))
+        self.assertTrue(self.security.history_start == '2026-01-01')
+        
+        history = self.security.get_history(dt.datetime.fromisoformat('2025-01-01'))
+
+        self.assertFalse(type(history) == InvalidDateFormatError)
+        self.mock_pandas.read_sql.assert_called_with('SELECT Datetime, Close FROM History WHERE SecurityId =\
+        (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'TEST\') AND Datetime > 2025-01-01 AND Datetime < 2026-01-01;',\
+        self.mock_con, index_col='Datetime')
+        self.mock_pandas.concat.assert_called_with([self.mock_history, preliminary_mock_data])
+        self.assertTrue(self.security.history_start == '2025-01-01')
+        return
+
+
+    def test_history_already_gathered(self):
+        '''Security.get_history: self.history has already been fetched from the
+        db and we only need to return a subset of it'''
+
+        self.security.history = self.mock_history
+        self.security.history_start = '2025-01-01'
+        
+        history = self.security.get_history(dt.datetime.fromisoformat('2025-02-02'))
+
+        self.assertFalse(type(history) == InvalidDateFormatError)
+        self.mock_pandas.read_sql.assert_not_called()
+        self.assertIsNone(pd.testing.assert_frame_equal(history, self.mock_history))
+        return
+
+
+    def test_history_already_gathered_start_is_none(self):
+        '''Security.get_history: self.history has alredy been fetched from the
+        db and start is None, so we need to return the entire history property'''
+
+        self.security.history = self.mock_history
+        self.security.history_start = '2025-01-01'
+
+        history = self.security.get_history()
+
+        self.assertFalse(type(history) == InvalidDateFormatError)
+        self.mock_pandas.read_sql.assert_not_called()
+        self.assertIsNone(pd.testing.assert_frame_equal(history, self.mock_history))        
+        return
+
+
+    def test_invalid_date_format(self):
+        '''Security.get_history: user did not pass a datetime object as the argument
+        so we should return a non-breaking error'''
+
+        history = self.security.get_history('2025-01-01')
+
+        self.assertTrue(type(history) == InvalidDateFormatError)
+        self.mock_pandas.read_sql.assert_not_called()
+        return
 
 
 class TestFetchUpdatedData(unittest.TestCase):

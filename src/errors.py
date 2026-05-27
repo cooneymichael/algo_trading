@@ -23,3 +23,10 @@ class NoNewDataError(Error):
     def __str__(self):
         print(f'NoNewDataError: f{self.message}')
 
+        
+class InvalidDateFormatError(Error):
+    def __init__(self, message):
+        super().__init__(message)
+
+    def __str__(self):
+        print(f'InvalidDateFormatError: f{self.message}')
