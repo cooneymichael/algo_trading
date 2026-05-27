@@ -96,19 +96,57 @@ class TestCalculateMarkovChain(unittest.TestCase):
 
 class TestMonteCarloSim(unittest.TestCase):
     def test_always_gain(self):
-        '''random_walk: edge case where markov chain has form [[1,0],[0,0]] '''
-        depth = 100
-        pts = monte_carlo_sim([[1,0], [0,0]], depth, 0)
+        '''monte_carlo_sim: edge case where markov chain always chooses a large gain state'''
 
-        # we cannot directly compare python lists, so we compare elementwise instead
+        # always a large gain
+        markov_chain = [[0,0,0,0,0],\
+                        [0,1,0,0,0],\
+                        [0,0,0,0,0],\
+                        [0,0,0,0,0],\
+                        [0,0,0,0,0]]
+
+        movement_distribution = {
+            'no movement': [-1],
+            'large gain': [1],
+            'small gain': [-1],
+            'small loss': [-1],
+            'large loss': [-1],
+        }
+
+        last_price = 0
+        depth = 100
+        initial_state = 1
+
+        pts = monte_carlo_sim(markov_chain, movement_distribution, last_price,\
+                              depth, initial_state)
+
         verification = list(map(lambda x: x[0] == x[1], zip(pts, range(1, depth+1))))
         self.assertTrue(all(verification))
 
 
     def test_always_loss(self):
-        '''random_walk: edge case where markov chain has form [[0,0], [0,1]]'''
+        '''monte_carlo_sim: edge case where markov chain always chooses a large loss state'''
+        # always a large loss
+        markov_chain = [[0,0,0,0,0],\
+                        [0,0,0,0,0],\
+                        [0,0,0,0,0],\
+                        [0,0,0,0,0],\
+                        [0,0,0,0,1]]
+
+        movement_distribution = {
+            'no movement': [1],
+            'large gain': [1],
+            'small gain': [1],
+            'small loss': [1],
+            'large loss': [-1],
+        }
+
+        last_price = 0
         depth = 100
-        pts = monte_carlo_sim([[0,0], [0,1]], depth, 1)
+        initial_state = 4
+
+        pts = monte_carlo_sim(markov_chain, movement_distribution, last_price,\
+                              depth, initial_state)
 
         verification = list(map(lambda x: x[0] == x[1], zip(pts, range(-1, -depth-1, -1))))
         self.assertTrue(all(verification))

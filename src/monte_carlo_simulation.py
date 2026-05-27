@@ -153,17 +153,17 @@ def monte_carlo_sim(markov_chain: list[list[float]],\
     be real numbers. Return the averaged list to be visualized or analyzed.
 
     key word arguments:
-    markov_chain --  a 5x5 matrix holding probabilities for gains and losses
-    depth --         the number of future events to simulate
-    initial_state -- a pointer to a row in markov_chain. 0 represents a gain, 1 represents a loss
+    markov_chain --           a 5x5 matrix holding probabilities for gains and losses
+    movements_distribution -- distribution to sample from for price movement categories
+    last_price --             starting point for simulation
+    depth --                  the number of future events to simulate
+    initial_state --          a pointer to a row in markov_chain. 0 represents a gain, 1 represents a loss
     '''
 
-    # points = []
     simulations = np.zeros((1000, depth))
 
     for idx, _ in enumerate(simulations):
         state_pointer = initial_state
-        # counter = 0
         simulated_price = last_price
 
         for i in range(depth):
