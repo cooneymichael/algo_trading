@@ -18,6 +18,7 @@ import yfinance as yf
 
 class Security():
     def __init__(self, ticker: str, db_path: str):
+        # TODO: make db_path a path object
         self.ticker = ticker
         self.db_path = db_path
         self.history = None
@@ -53,10 +54,15 @@ class Security():
 
         # we have never gotten the history for this security
         if self.history is None:
-            self.history = self._get_history_from_db(str(start.date()))
-
+            if start is not None:
+                start_date = str(start.date())
+            else:
+                start_date = None
+            self.history = self._get_history_from_db(start_date)
+            
             # date is pd.Timestamp here, not np.datetime64
-            self.history_start = str(self.history.index[0].date())
+            # print(type(self.history.index[0]))
+            self.history_start = str(self.history.index[0])
 
         # we got the history previously, but we need more history
         elif start is not None and start < dt.datetime.fromisoformat(self.history_start):
