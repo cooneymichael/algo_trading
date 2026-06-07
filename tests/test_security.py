@@ -31,8 +31,9 @@ class TestGetHistory(unittest.TestCase):
         ################################################################################
 
         self.mock_history = pd.DataFrame(columns=['Datetime', 'Close'], \
-                                         data=[[np.datetime64('2025-05-26T04:00:00'), 1.00], \
-                                               [np.datetime64('2025-05-27T04:00:00'), 5.00]])
+                                         data=[['2025-05-26', 1.00], \
+                                               ['2025-05-27', 5.00]])
+
         self.mock_history.set_index('Datetime', inplace=True)
 
         self.mock_pandas = MagicMock(spec=pd)
@@ -145,7 +146,7 @@ class TestGetHistory(unittest.TestCase):
 
     def test_invalid_date_format(self):
         '''Security.get_history: user did not pass a datetime object as the argument
-        so we should return a non-breaking error'''
+        so we should return a non-breaking error '''
 
         history = self.security.get_history('2025-01-01')
 

@@ -49,32 +49,28 @@ class Security():
     def get_history(self, start: dt.datetime=None) -> pd.DataFrame | InvalidDateFormatError:
         '''Get price movement history, either from a database or from the security.history
         property.'''
-        if start is not None and type(start) != dt.datetime:
+        if start is not None and type(start) is not dt.datetime:
             return InvalidDateFormatError('\'start\' parameter must datetime object')
 
-        # we have never gotten the history for this security
         if self.history is None:
-            if start is not None:
-                start_date = str(start.date())
-            else:
-                start_date = None
+            start_date = str(start.date()) if start is not None else None
             self.history = self._get_history_from_db(start_date)
-            
-            # date is pd.Timestamp here, not np.datetime64
-            # print(type(self.history.index[0]))
-            self.history_start = str(self.history.index[0])
+            self.history_start = self.history.index[0]
+            history = self.history
 
-        # we got the history previously, but we need more history
         elif start is not None and start < dt.datetime.fromisoformat(self.history_start):
             new_data = self._get_history_from_db(start=str(start.date()), end=self.history_start)
             self.history = pd.concat([new_data, self.history])
             self.history_start = str(start.date())
-        
-        # we got the history previously, and we only want a subset of it now
-        elif start is not None and start > dt.datetime.fromisoformat(self.history_start):
-            return self.history[self.history.index.date > start.date()]
-        
-        return self.history
+            history = self.history
+
+        elif start is not None and start >= dt.datetime.fromisoformat(self.history_start):
+            history = self.history[self.history.index > str(start.date())]
+
+        else:
+            history = self.history
+
+        return history
 
 
     def _get_history_from_db(self, start: int=None, end: int=None) -> pd.DataFrame:
