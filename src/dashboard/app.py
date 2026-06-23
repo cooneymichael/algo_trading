@@ -9,6 +9,13 @@ from shiny import reactive, req
 from shiny.express import input, module, render, ui
 from shinywidgets import render_plotly
 import sqlite3
+# from src.strategy import fifty_day_sma, two_hundred_day_sma
+
+# temporary hack
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from strategy import n_day_sma
 
 app_dir = Path(__file__).parent
 ui.page_opts(title="Securities Dashboard", fillable=True)
@@ -62,6 +69,31 @@ with ui.layout_columns(col_widths=[12, 12]):
                 mcs = MCS(hist)
                 pts = mcs.monte_carlo_sim(500)
                 return px.line(pts)
+            elif input.lower_chart() == '50/200 SMA':
+                sma_50 = n_day_sma(global_current_security.get(), 450, 50)
+                sma_50 = sma_50[~sma_50.isna()]
+                sma_50.rename('50 Day SMA', inplace=True)
+
+                sma_200 = n_day_sma(global_current_security.get(), 450, 200)
+                sma_200 = sma_200[~sma_200.isna()]
+                sma_200.rename('200 Day SMA', inplace=True)
+
+                most_recent_50 = sma_50.tail(n=1).values[0]
+                most_recent_200 = sma_200.tail(n=1).values[0]
+                ratio = most_recent_50 / most_recent_200
+                if ratio < 1:
+                    print('SELL')
+                else:
+                    print('HOLD')
+                print(ratio)
+                
+
+                combined = pd.concat([sma_50, sma_200], axis=1)
+                return px.line(combined, title=f'50/200 Day SMA',labels={'Datetime': 'Date', 'value': 'SMA'})
+
+                # return px.line(data.loc[~self.data['200 Day SMA'].isna(), ['Date', '50 Day SMA', '200 Day SMA']], \
+                #                x='Date', y=['50 Day SMA', '200 Day SMA'], title=f'{self.ticker} 50/200 SMA')
+
 
 
 
