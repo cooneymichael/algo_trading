@@ -15,7 +15,7 @@ import sqlite3
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from strategy import n_day_sma
+from strategy import n_day_sma, n_day_ema
 
 app_dir = Path(__file__).parent
 ui.page_opts(title="Securities Dashboard", fillable=True)
@@ -91,9 +91,9 @@ with ui.layout_columns(col_widths=[12, 12]):
                 combined = pd.concat([sma_50, sma_200], axis=1)
                 return px.line(combined, title=f'50/200 Day SMA',labels={'Datetime': 'Date', 'value': 'SMA'})
 
-                # return px.line(data.loc[~self.data['200 Day SMA'].isna(), ['Date', '50 Day SMA', '200 Day SMA']], \
-                #                x='Date', y=['50 Day SMA', '200 Day SMA'], title=f'{self.ticker} 50/200 SMA')
-
+            elif input.lower_chart() == 'EMA':
+                ema_50 = n_day_ema(global_current_security.get(), 50)
+                return px.line(ema_50, title=f'50 Day EMA', labels={'Datetime': 'Date'})
 
 
 
