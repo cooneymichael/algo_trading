@@ -21,7 +21,7 @@ class NoNewDataError(Error):
         super().__init__(message)
 
     def __str__(self):
-        print(f'NoNewDataError: f{self.message}')
+        return f'NoNewDataError: f{self.message}'
 
         
 class InvalidDateFormatError(Error):
@@ -29,4 +29,11 @@ class InvalidDateFormatError(Error):
         super().__init__(message)
 
     def __str__(self):
-        print(f'InvalidDateFormatError: f{self.message}')
+        return f'InvalidDateFormatError: f{self.message}'
+
+class DelistedSecurityError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+    def __str__(self):
+        return f'DelistedSecurityError: f{self.message}'

@@ -7,14 +7,17 @@
 #
 ################################################################################
 
+# TODO: return a success value in the fetch_updated_data method
+
 import datetime as dt
 import holidays
-from errors import NoNewDataError, InvalidDateFormatError
+from errors import DelistedSecurityError, InvalidDateFormatError, NoNewDataError
 import numpy as np
 import pandas as pd
 import sqlite3
 import yfinance as yf
 
+import matplotlib.pyplot as plt
 
 class Security():
     def __init__(self, ticker: str, db_path: str):
@@ -150,10 +153,13 @@ class Security():
         # no need to crash the program here, just let the caller know nothing is new
         if not self._is_new_data_available(start_date):
             return NoNewDataError('New data cannot be fetched right now')
-        
+
         try:
             security = yf.Ticker(self.ticker)
             updated_data = security.history(start=start_date, auto_adjust=False)
+
+            if updated_data.empty:
+                raise DelistedSecurityError('This security returned no data from yfinance. It has probably been delisted.')
             
             # We do not track these values currently
             # ETFs have capital gains, stocks do not
@@ -187,8 +193,10 @@ class Security():
             (Datetime, Open, High, Low, Close, Volume, OpenInt, SecurityId) \
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)', list(updated_data.itertuples()))
             con.commit()
-            
-            
+
+        except DelistedSecurityError:
+            pass
+
         except Exception as e:
             raise e
 
@@ -201,5 +209,19 @@ class Security():
 
 
 if __name__ == '__main__':
-    sec = Security('EWY', '../../Data/Data/stocks.db')
-    sec.get_history()
+    sec = Security('EWY', '../../Data/Data/stocks.db')  
+    updated = sec.fetch_updated_data()
+    
+    # history = sec.get_history()
+
+
+
+    # print(history.tail(n=100))
+    # print(history.shape)
+
+    # unique = pd.unique(history.index).shape
+    # print(unique)
+
+    # history.plot()
+    # plt.show()
+    
