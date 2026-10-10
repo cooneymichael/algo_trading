@@ -6,3 +6,7 @@
 # python venv
 algo_trading/*
 **__pycache__**
+src/.env
+
+# database
+data/*
