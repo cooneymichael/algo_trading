@@ -7,6 +7,26 @@
 #
 ################################################################################
 
+from dataclasses import dataclass
+
+# @dataclass(frozen=True)
+# class Ok[T]:
+#     value: T
+
+# @dataclass(frozen=True)
+# class Err[E]:
+#     value: E
+
+# @dataclass(frozen=True)
+# class Success[T]:
+#     value: T
+
+# @dataclass(frozen=True)
+# class Failure[E]:
+#     value: E
+
+# type Result[T, E] = Ok(T) | Err[E]
+
 class Error():
     def __init__(self, message):
         self.message = message
@@ -30,3 +50,39 @@ class InvalidDateFormatError(Error):
 
     def __str__(self):
         print(f'InvalidDateFormatError: f{self.message}')
+
+
+class FailedConnectionException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
+    def __str__(self):
+        print(f'FailedConnectionException: f{self.message}')
+
+
+class FailedDisconnectException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
+    def __str__(self):
+        print(f'FailedDisconnectException: f{self.message}')
+
+
+class FailedCursorOpenException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
+    def __str__(self):
+        print(f'FailedCursorOpenException: f{self.message}')
+
+
+class FailedCursorCloseException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
+    def __str__(self):
+        print(f'FailedCursorCloseException: f{self.message}')
