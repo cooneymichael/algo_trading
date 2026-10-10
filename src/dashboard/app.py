@@ -1,4 +1,5 @@
 # from faicons import icon_svg
+from database import DataBase
 from dotenv import load_dotenv
 from monte_carlo_simulation import MonteCarloSimulation as MCS
 import os
@@ -26,19 +27,18 @@ ui.page_opts(title="Securities Dashboard", fillable=True)
 DB_PATH = os.getenv('AT_DATABASE_PATH')
 
 
-con = sqlite3.connect(DB_PATH)
-cur = con.cursor()
-tickers = cur.execute('SELECT SecurityTicker FROM Securities;')
-tickers = tickers.fetchall()
-tickers = [ticker[0] for ticker in tickers]
+database = DataBase(DB_PATH)
+con = database.open_con()
+cur = database.open_cur()
+tickers = database.run_query('SELECT SecurityTicker FROM Securities;')
+tickers = [ticker[0] for ticker in tickers.fetchall()]
 
-global_current_security = reactive.value(Security('A', db_path=DB_PATH))
+global_current_security = reactive.value(Security('A', database))
 
 def update_global_current_security(security: str):
-    new_security = Security(security, db_path=DB_PATH)
+    new_security = Security(security, database)
     global_current_security.set(new_security)
     return global_current_security
-    # global_current_security.set(Security(security, db_path=DB_PATH))
 
 with ui.sidebar(title='Dashboard Controls'):
     ui.input_selectize('ticker', 'Select Ticker',

@@ -10,8 +10,6 @@ import pandas as pd
 import unittest
 from unittest.mock import Mock, MagicMock, patch
 
-# import monte_carlo_simulation
-# from monte_carlo_simulation import calculate_markov_chain, monte_carlo_sim, calculate_price_move_distribution
 from monte_carlo_simulation import MonteCarloSimulation as MCS
 
 

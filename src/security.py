@@ -7,6 +7,7 @@
 #
 ################################################################################
 
+from database import DataBase
 import datetime as dt
 import holidays
 from errors import NoNewDataError, InvalidDateFormatError
@@ -17,33 +18,14 @@ import yfinance as yf
 
 
 class Security():
-    def __init__(self, ticker: str, db_path: str):
-        # TODO: make db_path a path object
+    def __init__(self, ticker: str, database: DataBase):
         self.ticker = ticker
-        self.db_path = db_path
+        self.database: DataBase = database
         self.history = None
         self.history_start = None
 
         # track if db connection is open
         self.con_flag = False
-
-
-    def _open_con(self) -> sqlite3.Connection:
-        try:
-            self.con_flag = True
-            return sqlite3.connect(self.db_path)
-        except Exception as e:
-            self.con_flag = False
-            raise e
-        
-
-    def _close_con(self, con) -> None:
-        try:
-            self.con_flag = False
-            con.close()
-        except Exception as e:
-            self.con_flag = True
-            raise e
 
 
     def get_history(self, start: dt.datetime=None) -> pd.DataFrame | InvalidDateFormatError:
@@ -76,7 +58,7 @@ class Security():
     def _get_history_from_db(self, start: int=None, end: int=None) -> pd.DataFrame:
         '''Helper function to retrieve information from a sqlite 3 DB'''
 
-        con = self._open_con()
+        con = self.database.open_con()
 
         query = f'SELECT Datetime, Close FROM History WHERE SecurityId =\
         (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'{self.ticker}\')'
@@ -90,7 +72,7 @@ class Security():
         query += ';'
 
         data = pd.read_sql(query, con, index_col='Datetime')
-        self._close_con(con)
+        self.database.close_con()
 
         return data
 
@@ -142,10 +124,11 @@ class Security():
             (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'{self.ticker}\')\
             ORDER BY Datetime DESC LIMIT 1;'
 
-            con = self._open_con()
-            cur = con.cursor()
-            start_date = cur.execute(query).fetchone()[0]
-            self._close_con(con)
+            con = self.database.open_con()
+            cur = self.database.open_cur()
+            start_date = self.database.run_query(query).fetchone()[0]
+            self.database.close_cur()
+            self.database.close_con()
 
         # no need to crash the program here, just let the caller know nothing is new
         if not self._is_new_data_available(start_date):
@@ -174,32 +157,35 @@ class Security():
                 self.history = pd.concat([self.history, updated_data['Close']])
                 
             # need to save to db
-            con = self._open_con()
-            cur = con.cursor()
-            
-            security_id = cur.execute(f'SELECT SecurityId FROM Securities WHERE \
+            con = self.database.open_con()
+            cur = self.database.open_cur()
+
+            security_id = self.database.run_query(f'SELECT SecurityId FROM Securities WHERE \
             SecurityTicker = \'{self.ticker}\'').fetchone()[0]
+            # security_id = cur.execute(f'SELECT SecurityId FROM Securities WHERE \
+            # SecurityTicker = \'{self.ticker}\'').fetchone()[0]
             
             updated_data['SecurityId'] = security_id
             
             # Datetime is the index, so we keep the index in itertuples
-            cur.executemany('INSERT OR IGNORE INTO History \
+            self.database.run_batch_query('INSERT OR IGNORE INTO History \
             (Datetime, Open, High, Low, Close, Volume, OpenInt, SecurityId) \
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)', list(updated_data.itertuples()))
-            con.commit()
+            self.database.commit()
             
             
         except Exception as e:
             raise e
 
         finally:
-            if self.con_flag:
-                self._close_con(con)
+            if self.database.is_connection_open():
+                self.database.close_cur()
+                self.database.close_con()
         
     def __str__(self):
         return f'Instance of Security: {self.ticker}'
 
-
+    
 if __name__ == '__main__':
     sec = Security('EWY', '../../Data/Data/stocks.db')
     sec.get_history()

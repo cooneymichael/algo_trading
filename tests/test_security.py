@@ -15,6 +15,7 @@ import unittest
 from unittest.mock import Mock, MagicMock, call
 import yfinance as yf
 
+from database import DataBase
 from errors import NoNewDataError, InvalidDateFormatError
 import security as security_module
 from security import Security
@@ -23,7 +24,18 @@ from security import Security
 
 class TestGetHistory(unittest.TestCase):
     def setUp(self):
-        self.security = Security('TEST', 'fake/db/path')
+        self.mock_con = MagicMock()
+        self.mock_cursor = MagicMock()
+        self.mock_cursor_exec = MagicMock()
+
+        self.mock_database = MagicMock(spec=DataBase)
+        self.mock_database.open_con.return_value = self.mock_con
+        self.mock_database.open_cur.return_value = self.mock_cursor
+        self.mock_database.run_query.return_value = self.mock_cursor
+        self.mock_cursor.fetchone.return_value = 'Mock con.cur.execute.fetchon function chain called'        
+
+
+        self.security = Security('TEST', self.mock_database)
 
 
         ################################################################################
@@ -41,33 +53,9 @@ class TestGetHistory(unittest.TestCase):
         
         self._orig_pd = security_module.pd
         security_module.pd = self.mock_pandas
-
-
-        ################################################################################
-        # Mock sqlite3
-        ################################################################################
-
-        self.mock_sqlite3 = MagicMock(spec=sqlite3)
-        self.mock_con = MagicMock()
-        self.mock_cursor = MagicMock()
-        self.mock_cursor_exec = MagicMock()
         
-        # the mock sqlite3 connect method returns the mock con
-        self.mock_sqlite3.connect.return_value = self.mock_con
-
-        # the mock con returns the mock cursor
-        self.mock_con.cursor.return_value = self.mock_cursor
-
-        self.mock_cursor.execute.return_value = self.mock_cursor
-        self.mock_cursor.fetchone.return_value = 'Mock con.cur.execute.fetchon function chain called'
-
-        # replace the module sqlite3 con with our mock con
-        self._orig_sqlite3 = security_module.sqlite3
-        security_module.sqlite3 = self.mock_sqlite3
-
 
     def tearDown(self):
-        security_module.sqlite3 = self._orig_sqlite3
         security_module.pd = self._orig_pd
 
 
@@ -158,7 +146,19 @@ class TestGetHistory(unittest.TestCase):
 class TestFetchUpdatedData(unittest.TestCase):
     def setUp(self):
         '''Security.fetch_updated_data: test'''
-        self.security = Security('TEST', 'fake/db/path')
+
+        self.mock_con = MagicMock()
+        self.mock_cursor = MagicMock()
+        self.mock_cursor_exec = MagicMock()
+
+        self.mock_database = MagicMock(spec=DataBase)
+        self.mock_database.open_con.return_value = self.mock_con
+        self.mock_database.open_cur.return_value = self.mock_cursor
+        self.mock_database.run_query.return_value = self.mock_cursor
+        self.mock_cursor.fetchone.return_value = 'Mock con.cur.execute.fetchon function chain called'        
+
+
+        self.security = Security('TEST', self.mock_database)
 
         # create a fake date that we will use for 'today'
         self.mock_today_date = dt.datetime(2025, 5, 4, 16, 0, 0)
@@ -181,34 +181,7 @@ class TestFetchUpdatedData(unittest.TestCase):
         
 
         ################################################################################
-        # repeat the above for the sqlite3 connection
-        ################################################################################
-
-        self.mock_sqlite3 = MagicMock(spec=sqlite3)
-        self.mock_con = MagicMock()
-        self.mock_cursor = MagicMock()
-        self.mock_cursor_exec = MagicMock()
-        
-        # the mock sqlite3 connect method returns the mock con
-        self.mock_sqlite3.connect.return_value = self.mock_con
-
-        # the mock con returns the mock cursor
-        self.mock_con.cursor.return_value = self.mock_cursor
-
-        # the sql code being tested: cur.execute(...).fetchone()
-        # execute returns an instance of cursor here, so we need to mock it and
-        # redirect its return to the mock cursor, otherwise it will be none and
-        # our mock will not work
-        self.mock_cursor.execute.return_value = self.mock_cursor
-        self.mock_cursor.fetchone.return_value = 'Mock con.cur.execute.fetchon function chain called'
-
-        # replace the module sqlite3 con with our mock con
-        self._orig_sqlite3 = security_module.sqlite3
-        security_module.sqlite3 = self.mock_sqlite3
-
-
-        ################################################################################
-        # repeat the above for the yfinance module
+        # Mock the yfinance module
         ################################################################################
 
         mock_yf_data = pd.DataFrame(columns = ['Date', 'Open', 'High', 'Low', \
@@ -238,7 +211,7 @@ class TestFetchUpdatedData(unittest.TestCase):
     
     def tearDown(self):
         security_module.dt = self._orig_dt
-        security_module.sqlite3 = self._orig_sqlite3
+        # security_module.sqlite3 = self._orig_sqlite3
         security_module.yf = self._orig_yf
 
         
@@ -249,16 +222,17 @@ class TestFetchUpdatedData(unittest.TestCase):
         self.mock_cursor.fetchone.side_effect = [['2025-05-01'], ['1']]
         self.security.fetch_updated_data()
         
-        self.mock_cursor.execute.assert_any_call('SELECT Datetime FROM History WHERE SecurityId = \
+        self.mock_database.run_query.assert_any_call('SELECT Datetime FROM History WHERE SecurityId = \
             (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'TEST\')\
             ORDER BY Datetime DESC LIMIT 1;')
+
         self.mock_yf_ticker.history.assert_called_once()
-        self.mock_cursor.execute.assert_any_call('SELECT SecurityId FROM Securities WHERE \
+        self.mock_database.run_query.assert_any_call('SELECT SecurityId FROM Securities WHERE \
             SecurityTicker = \'TEST\'')
-        self.mock_con.commit.assert_called_once()
+        self.mock_database.commit.assert_called_once()
         self.assertIsNone(self.security.history)
         self.assertIsNone(self.security.history_start)
-        return
+        return                 
 
     
     def test_fetch_data_with_start_date(self):
@@ -293,11 +267,11 @@ class TestFetchUpdatedData(unittest.TestCase):
 
         assert call('SELECT Datetime FROM History WHERE SecurityId = \
             (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'TEST\')\
-            ORDER BY Datetime DESC LIMIT 1;') not in self.mock_cursor.execute.mock_calls
+            ORDER BY Datetime DESC LIMIT 1;') not in self.mock_database.run_query.mock_calls
         self.mock_yf_ticker.history.assert_called_once()
-        self.mock_cursor.execute.assert_any_call('SELECT SecurityId FROM Securities WHERE \
+        self.mock_database.run_query.assert_any_call('SELECT SecurityId FROM Securities WHERE \
             SecurityTicker = \'TEST\'')
-        self.mock_con.commit.assert_called_once()
+        self.mock_database.commit.assert_called_once()
 
         self.assertIsNone(pd.testing.assert_frame_equal(self.security.history, correct_history))
         return
@@ -312,14 +286,14 @@ class TestFetchUpdatedData(unittest.TestCase):
         self.security.fetch_updated_data()
 
         # assertions
-        self.mock_cursor.execute.assert_any_call('SELECT Datetime FROM History WHERE SecurityId = \
+        self.mock_database.run_query.assert_any_call('SELECT Datetime FROM History WHERE SecurityId = \
             (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'TEST\')\
             ORDER BY Datetime DESC LIMIT 1;')
         self.mock_dt_module.datetime.today.assert_called()
         self.mock_yf_ticker.history.assert_called_once()
-        self.mock_cursor.execute.assert_any_call('SELECT SecurityId FROM Securities WHERE \
+        self.mock_database.run_query.assert_any_call('SELECT SecurityId FROM Securities WHERE \
             SecurityTicker = \'TEST\'')
-        self.mock_con.commit.assert_called_once()
+        self.mock_database.commit.assert_called_once()
 
         self.assertIsNone(self.security.history)
         self.assertIsNone(self.security.history_start)
@@ -335,11 +309,11 @@ class TestFetchUpdatedData(unittest.TestCase):
         should_be_error = self.security.fetch_updated_data()
 
         self.assertTrue(type(should_be_error) == NoNewDataError)
-        self.mock_cursor.execute.assert_called_once()
+        self.mock_database.run_query.assert_called_once()
         self.mock_dt_module.datetime.today.assert_called()
 
         self.mock_yf_ticker.history.assert_not_called()
-        self.mock_con.commit.assert_not_called()
+        self.mock_database.commit.assert_not_called()
         return
 
 
@@ -352,11 +326,11 @@ class TestFetchUpdatedData(unittest.TestCase):
         should_be_error = self.security.fetch_updated_data()
 
         self.assertTrue(type(should_be_error) == NoNewDataError)
-        self.mock_cursor.execute.assert_called_once()
+        self.mock_database.run_query.assert_called_once()
         self.mock_dt_module.datetime.today.assert_called()
 
         self.mock_yf_ticker.history.assert_not_called()
-        self.mock_con.commit.assert_not_called()
+        self.mock_database.commit.assert_not_called()
         return
 
 
@@ -369,11 +343,11 @@ class TestFetchUpdatedData(unittest.TestCase):
         should_be_error = self.security.fetch_updated_data()
 
         self.assertTrue(type(should_be_error) == NoNewDataError)
-        self.mock_cursor.execute.assert_called_once()
+        self.mock_database.run_query.assert_called_once()
         self.mock_dt_module.datetime.today.assert_called()
 
         self.mock_yf_ticker.history.assert_not_called()
-        self.mock_con.commit.assert_not_called()
+        self.mock_database.commit.assert_not_called()
         return
 
 
@@ -386,11 +360,11 @@ class TestFetchUpdatedData(unittest.TestCase):
         should_be_error = self.security.fetch_updated_data()
 
         self.assertTrue(type(should_be_error) == NoNewDataError)
-        self.mock_cursor.execute.assert_called_once()
+        self.mock_database.run_query.assert_called_once()
         self.mock_dt_module.datetime.today.assert_called()
 
         self.mock_yf_ticker.history.assert_not_called()
-        self.mock_con.commit.assert_not_called()
+        self.mock_database.commit.assert_not_called()
         return
 
 
@@ -403,11 +377,11 @@ class TestFetchUpdatedData(unittest.TestCase):
         should_be_error = self.security.fetch_updated_data()
 
         self.assertTrue(type(should_be_error) == NoNewDataError)
-        self.mock_cursor.execute.assert_called_once()
+        self.mock_database.run_query.assert_called_once()
         self.mock_dt_module.datetime.today.assert_called()
 
         self.mock_yf_ticker.history.assert_not_called()
-        self.mock_con.commit.assert_not_called()
+        self.mock_database.commit.assert_not_called()
         return
 
 

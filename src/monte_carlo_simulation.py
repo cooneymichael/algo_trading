@@ -15,7 +15,6 @@ import holidays
 from errors import NoNewDataError
 import numpy as np
 import pandas as pd
-import sqlite3
 import yfinance as yf
 
 
