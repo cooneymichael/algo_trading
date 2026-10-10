@@ -1,5 +1,7 @@
 # from faicons import icon_svg
+from dotenv import load_dotenv
 from monte_carlo_simulation import MonteCarloSimulation as MCS
+import os
 import pandas as pd
 from pathlib import Path
 import plotly.express as px
@@ -13,14 +15,16 @@ import sqlite3
 
 # temporary hack
 import sys
-import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from strategy import n_day_sma, n_day_ema
+
+load_dotenv()
 
 app_dir = Path(__file__).parent
 ui.page_opts(title="Securities Dashboard", fillable=True)
 
-DB_PATH = Path('./../../../Data/Data/stocks.db')
+DB_PATH = os.getenv('AT_DATABASE_PATH')
+
 
 con = sqlite3.connect(DB_PATH)
 cur = con.cursor()
