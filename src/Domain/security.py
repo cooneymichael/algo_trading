@@ -7,13 +7,12 @@
 #
 ################################################################################
 
-from database import DataBase
+from Database.database import DataBase
 import datetime as dt
 import holidays
-from errors import NoNewDataError, InvalidDateFormatError
+from Errors.errors import NoNewDataError, InvalidDateFormatError
 import numpy as np
 import pandas as pd
-import sqlite3
 import yfinance as yf
 
 

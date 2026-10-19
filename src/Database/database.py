@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from errors import FailedConnectionException, FailedCursorOpenException, FailedCursorCloseException, FailedDisconnectException
+from Errors.errors import FailedConnectionException, FailedCursorOpenException, FailedCursorCloseException, FailedDisconnectException
 from typing import Any, Protocol
 import sqlite3
 

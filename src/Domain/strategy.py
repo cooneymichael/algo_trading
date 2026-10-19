@@ -7,8 +7,8 @@
 ################################################################################
 
 import datetime as dt
+from Domain.security import Security
 import pandas as pd
-from security import Security
 
 
 def n_day_sma(security: Security, num_days: int, window_size: int) -> pd.DataFrame:
@@ -35,14 +35,3 @@ def n_day_ema(security: Security, window_size: int) -> pd.DataFrame:
         init_ema = ema
 
     return hist['ema']
-
-
-# def ema(df, span):
-#    ...:     multiplier = 2/(1+span)
-#    ...:     init_sma = df['Close'].iloc[:span].mean()
-#    ...:     for idx, row in df.iloc[span:].iterrows():
-#    ...:         val_t = row.values[0]
-#    ...:         ema = (val_t * multiplier) + (init_sma * (1-multiplier))
-#    ...:         df.loc[idx, 'ema'] = ema
-#    ...:         init_sma = ema
-#    ...:     print(df)
