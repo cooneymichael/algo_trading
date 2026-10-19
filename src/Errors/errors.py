@@ -9,23 +9,6 @@
 
 from dataclasses import dataclass
 
-# @dataclass(frozen=True)
-# class Ok[T]:
-#     value: T
-
-# @dataclass(frozen=True)
-# class Err[E]:
-#     value: E
-
-# @dataclass(frozen=True)
-# class Success[T]:
-#     value: T
-
-# @dataclass(frozen=True)
-# class Failure[E]:
-#     value: E
-
-# type Result[T, E] = Ok(T) | Err[E]
 
 class Error():
     def __init__(self, message):

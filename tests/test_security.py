@@ -7,19 +7,17 @@
 #
 ################################################################################
 
+from Database.database import DataBase
 import datetime as dt
+import Domain.security as security_module
+from Domain.security import Security
+from Errors.errors import NoNewDataError, InvalidDateFormatError
 import numpy as np
 import pandas as pd
 import sqlite3
 import unittest
 from unittest.mock import Mock, MagicMock, call
 import yfinance as yf
-
-from database import DataBase
-from errors import NoNewDataError, InvalidDateFormatError
-import security as security_module
-from security import Security
-
 
 
 class TestGetHistory(unittest.TestCase):

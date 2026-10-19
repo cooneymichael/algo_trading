@@ -6,11 +6,10 @@
 #
 ################################################################################
 
+from Domain.monte_carlo_simulation import MonteCarloSimulation as MCS
 import pandas as pd
 import unittest
 from unittest.mock import Mock, MagicMock, patch
-
-from monte_carlo_simulation import MonteCarloSimulation as MCS
 
 
 class TestCalculatePriceMoveDistribution(unittest.TestCase):
@@ -125,7 +124,7 @@ class TestMonteCarloSim(unittest.TestCase):
 
         depth = 100
 
-        with patch('monte_carlo_simulation.MonteCarloSimulation', return_value=cls, autospec=True) as mock_mcs:
+        with patch('Domain.monte_carlo_simulation.MonteCarloSimulation', return_value=cls, autospec=True) as mock_mcs:
             pts = mock_mcs.monte_carlo_sim(depth)
             verification = list(map(lambda x: x[0] == x[1], zip(pts, range(1, depth+1))))
             self.assertTrue(all(verification))
@@ -154,7 +153,7 @@ class TestMonteCarloSim(unittest.TestCase):
         
         depth = 100
 
-        with patch('monte_carlo_simulation.MonteCarloSimulation', return_value=cls, autospec=True) as mock_mcs:
+        with patch('Domain.monte_carlo_simulation.MonteCarloSimulation', return_value=cls, autospec=True) as mock_mcs:
             pts = mock_mcs.monte_carlo_sim(depth)
             verification = list(map(lambda x: x[0] == x[1], zip(pts, range(-1, -depth-1, -1))))
             self.assertTrue(all(verification))

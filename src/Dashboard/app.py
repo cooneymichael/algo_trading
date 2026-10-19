@@ -1,23 +1,18 @@
 # from faicons import icon_svg
-from database import DataBase
+from Database.database import DataBase
+from Domain.monte_carlo_simulation import MonteCarloSimulation as MCS
+from Domain.security import Security
+from Domain.strategy import n_day_sma, n_day_ema
 from dotenv import load_dotenv
-from monte_carlo_simulation import MonteCarloSimulation as MCS
 import os
 import pandas as pd
 from pathlib import Path
 import plotly.express as px
 import seaborn as sns
-from security import Security
 from shiny import reactive, req
 from shiny.express import input, module, render, ui
 from shinywidgets import render_plotly
 import sqlite3
-# from src.strategy import fifty_day_sma, two_hundred_day_sma
-
-# temporary hack
-import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from strategy import n_day_sma, n_day_ema
 
 load_dotenv()
 
