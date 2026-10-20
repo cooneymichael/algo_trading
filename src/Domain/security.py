@@ -10,7 +10,7 @@
 from Database.database import DataBase
 import datetime as dt
 import holidays
-from Errors.errors import NoNewDataError, InvalidDateFormatError
+from Errors.errors import NoNewDataError, InvalidDateFormatException
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -27,11 +27,12 @@ class Security():
         self.con_flag = False
 
 
-    def get_history(self, start: dt.datetime=None) -> pd.DataFrame | InvalidDateFormatError:
+    def get_history(self, start: dt.datetime=None) -> pd.DataFrame:
         '''Get price movement history, either from a database or from the security.history
         property.'''
         if start is not None and type(start) is not dt.datetime:
-            return InvalidDateFormatError('\'start\' parameter must datetime object')
+            # return InvalidDateFormatError('\'start\' parameter must datetime object')
+            raise InvalidDateFormatException('\'start\' parameter must datetime object')
 
         if self.history is None:
             start_date = str(start.date()) if start is not None else None
@@ -39,17 +40,18 @@ class Security():
             self.history_start = self.history.index[0]
             history = self.history
 
-        elif start is not None and start < dt.datetime.fromisoformat(self.history_start):
+        elif start is None:
+            history = self.history
+
+        elif start < dt.datetime.fromisoformat(self.history_start):
             new_data = self._get_history_from_db(start=str(start.date()), end=self.history_start)
             self.history = pd.concat([new_data, self.history])
             self.history_start = str(start.date())
             history = self.history
 
-        elif start is not None and start >= dt.datetime.fromisoformat(self.history_start):
-            history = self.history[self.history.index > str(start.date())]
-
         else:
-            history = self.history
+            # start > history_start
+            history = self.history[self.history.index > str(start.date())]
 
         return history
 

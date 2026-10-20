@@ -1,9 +1,11 @@
 # from faicons import icon_svg
+# from dash import dcc
 from Database.database import DataBase
 from Domain.monte_carlo_simulation import MonteCarloSimulation as MCS
 from Domain.security import Security
 from Domain.strategy import n_day_sma, n_day_ema
 from dotenv import load_dotenv
+from Errors.errors import InvalidDateFormatException
 import os
 import pandas as pd
 from pathlib import Path
@@ -54,7 +56,13 @@ with ui.layout_columns(col_widths=[12, 12]):
     with ui.card():
         @render_plotly
         def price_chart():
-            hist = global_current_security.get().get_history()
+            try:
+                hist = global_current_security.get().get_history()
+            except InvalidDateFormatException:
+                # temporary until I add a proper logger
+                print('Invalid date')
+                return px.scatter_3d().add_annotation(text=f'Attempted to retrieve security history with an invalid date.  Refer to the logs.', showarrow=False, font={"size":20, 'color': 'red'})
+
             print(input.ticker())
             print(global_current_security.get())
             return px.line(hist, x=hist.index, y='Close', title=f'Closing Prices for {global_current_security.get().ticker}')
@@ -64,7 +72,13 @@ with ui.layout_columns(col_widths=[12, 12]):
         def dynamic_chart():
             req(input.lower_chart())
             if input.lower_chart() == 'Monte Carlo Simulation':
-                hist = global_current_security.get().get_history()
+                try:
+                    hist = global_current_security.get().get_history()
+                except InvalidDateFormatException:
+                    # temporary until logger
+                    print('Invalid date')
+                    return px.scatter_3d().add_annotation(text=f'Attempted to retrieve security history with an invalid date.  Refer to the logs.', showarrow=False, font={"size":20, 'color': 'red'})
+
                 mcs = MCS(hist)
                 pts = mcs.monte_carlo_sim(500)
                 return px.line(pts)
