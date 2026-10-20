@@ -1,9 +1,12 @@
 # from faicons import icon_svg
+# from dash import dcc
 from Database.database import DataBase
 from Domain.monte_carlo_simulation import MonteCarloSimulation as MCS
 from Domain.security import Security
 from Domain.strategy import n_day_sma, n_day_ema
 from dotenv import load_dotenv
+from Errors.errors import InvalidDateFormatException
+import logging
 import os
 import pandas as pd
 from pathlib import Path
@@ -13,6 +16,10 @@ from shiny import reactive, req
 from shiny.express import input, module, render, ui
 from shinywidgets import render_plotly
 import sqlite3
+
+
+logger = logging.getLogger(__name__)
+
 
 load_dotenv()
 
@@ -33,6 +40,7 @@ global_current_security = reactive.value(Security('A', database))
 def update_global_current_security(security: str):
     new_security = Security(security, database)
     global_current_security.set(new_security)
+    logger.info(f'updated global security to {security}')
     return global_current_security
 
 with ui.sidebar(title='Dashboard Controls'):
@@ -54,9 +62,15 @@ with ui.layout_columns(col_widths=[12, 12]):
     with ui.card():
         @render_plotly
         def price_chart():
-            hist = global_current_security.get().get_history()
-            print(input.ticker())
-            print(global_current_security.get())
+            logger.debug(f'calculating price chart for security {global_current_security.get()}')
+            try:
+                hist = global_current_security.get().get_history()
+            except InvalidDateFormatException:
+                logger.error(f'invalid date format exception: price chart unable to get history for {global_current_security.get()}')
+                return px.scatter_3d().add_annotation(text=f'Attempted to retrieve security history with an invalid date.  Refer to the logs.', showarrow=False, font={"size":20, 'color': 'red'})
+
+            logger.debug(f'{input.ticker()}')
+            logger.debug(f'{global_current_security.get()}')
             return px.line(hist, x=hist.index, y='Close', title=f'Closing Prices for {global_current_security.get().ticker}')
             
     with ui.card():
@@ -64,11 +78,20 @@ with ui.layout_columns(col_widths=[12, 12]):
         def dynamic_chart():
             req(input.lower_chart())
             if input.lower_chart() == 'Monte Carlo Simulation':
-                hist = global_current_security.get().get_history()
+                logger.debug(f'calculating monte carlo simulation for security {global_current_security.get()}')
+                try:
+                    hist = global_current_security.get().get_history()
+                except InvalidDateFormatException:
+                    # temporary until logger
+                    # print('Invalid date')
+                    logger.error(f'invalid date format exception: monte carlo simulation unable to get history for {global_current_security.get()}')
+                    return px.scatter_3d().add_annotation(text=f'Attempted to retrieve security history with an invalid date.  Refer to the logs.', showarrow=False, font={"size":20, 'color': 'red'})
+
                 mcs = MCS(hist)
                 pts = mcs.monte_carlo_sim(500)
                 return px.line(pts)
             elif input.lower_chart() == '50/200 SMA':
+                logger.debug(f'calculating 50/200 SMA for security {global_current_security.get()}')
                 sma_50 = n_day_sma(global_current_security.get(), 450, 50)
                 sma_50 = sma_50[~sma_50.isna()]
                 sma_50.rename('50 Day SMA', inplace=True)
@@ -81,16 +104,17 @@ with ui.layout_columns(col_widths=[12, 12]):
                 most_recent_200 = sma_200.tail(n=1).values[0]
                 ratio = most_recent_50 / most_recent_200
                 if ratio < 1:
-                    print('SELL')
+                    logger.info(f'EXCHANGE DECISION: {global_current_security.get()}: SELL')
                 else:
-                    print('HOLD')
-                print(ratio)
+                    logger.info(f'EXCHANGE DECISION: {global_current_security.get()}: HOLD')
+                logger.info(f'SMA 50/200 RATIO: {global_current_security.get()}: {ratio}')
                 
 
                 combined = pd.concat([sma_50, sma_200], axis=1)
                 return px.line(combined, title=f'50/200 Day SMA',labels={'Datetime': 'Date', 'value': 'SMA'})
 
             elif input.lower_chart() == 'EMA':
+                logger.debug(f'calculating EMA for security {global_current_security.get()}')                
                 ema_50 = n_day_ema(global_current_security.get(), 50)
                 return px.line(ema_50, title=f'50 Day EMA', labels={'Datetime': 'Date'})
 
