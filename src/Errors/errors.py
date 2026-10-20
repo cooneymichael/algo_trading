@@ -27,9 +27,17 @@ class NoNewDataError(Error):
         print(f'NoNewDataError: f{self.message}')
 
         
-class InvalidDateFormatError(Error):
+# class InvalidDateFormatError(Error):
+#     def __init__(self, message):
+#         super().__init__(message)
+
+#     def __str__(self):
+#         print(f'InvalidDateFormatError: f{self.message}')
+
+class InvalidDateFormatException(Exception):
     def __init__(self, message):
         super().__init__(message)
+        self.message = message
 
     def __str__(self):
         print(f'InvalidDateFormatError: f{self.message}')

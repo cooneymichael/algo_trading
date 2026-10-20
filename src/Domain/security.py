@@ -10,52 +10,65 @@
 from Database.database import DataBase
 import datetime as dt
 import holidays
-from Errors.errors import NoNewDataError, InvalidDateFormatError
+from Errors.errors import NoNewDataError, InvalidDateFormatException
+from logging import Logger
 import numpy as np
 import pandas as pd
 import yfinance as yf
 
 
 class Security():
-    def __init__(self, ticker: str, database: DataBase):
+    def __init__(self, ticker: str, database: DataBase, logger: Logger):
         self.ticker = ticker
         self.database: DataBase = database
         self.history = None
         self.history_start = None
+        self.logger = logger
 
         # track if db connection is open
         self.con_flag = False
 
 
-    def get_history(self, start: dt.datetime=None) -> pd.DataFrame | InvalidDateFormatError:
+    def get_history(self, start: dt.datetime=None) -> pd.DataFrame:
         '''Get price movement history, either from a database or from the security.history
         property.'''
+        self.logger.debug('entering function get_history')
         if start is not None and type(start) is not dt.datetime:
-            return InvalidDateFormatError('\'start\' parameter must datetime object')
+            self.logger.error('get_history: invalid date format exception in get_history()')
+            # return InvalidDateFormatError('\'start\' parameter must datetime object')
+            raise InvalidDateFormatException('\'start\' parameter must datetime object')
 
         if self.history is None:
+            self.logger.debug('get_history: self.history is None')
             start_date = str(start.date()) if start is not None else None
             self.history = self._get_history_from_db(start_date)
             self.history_start = self.history.index[0]
             history = self.history
 
-        elif start is not None and start < dt.datetime.fromisoformat(self.history_start):
+        elif start is None:
+            self.logger.debug('get_history: parameter start is None')
+            history = self.history
+
+        elif start < dt.datetime.fromisoformat(self.history_start):
+            self.logger.debug('get_history: start date is earlier than history start date')
             new_data = self._get_history_from_db(start=str(start.date()), end=self.history_start)
             self.history = pd.concat([new_data, self.history])
             self.history_start = str(start.date())
             history = self.history
 
-        elif start is not None and start >= dt.datetime.fromisoformat(self.history_start):
+        else:
+            self.logger.debug('get_history: start date is later than history start date')
+            # start > history_start
             history = self.history[self.history.index > str(start.date())]
 
-        else:
-            history = self.history
-
+        self.logger.debug('get_history: exiting function')
         return history
 
 
     def _get_history_from_db(self, start: int=None, end: int=None) -> pd.DataFrame:
         '''Helper function to retrieve information from a sqlite 3 DB'''
+
+        self.logger.debug('_get_history_from_db: entering function')
 
         con = self.database.open_con()
 
@@ -63,16 +76,20 @@ class Security():
         (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'{self.ticker}\')'
 
         if start is not None:
+            self.logger.debug(f'_get_history_from_db: start defined, appending \'AND Datetime > {str(start)}\' to query')
             query += f' AND Datetime > {str(start)}'
 
         if end is not None:
+            self.logger.debug(f'_get_history_from_db: end defined, appending \'AND Datetime < {str(start)}\' to query')
             query += f' AND Datetime < {str(end)}'
 
         query += ';'
 
+        self.logger.debug('_get_history_from_db: querying database')
         data = pd.read_sql(query, con, index_col='Datetime')
         self.database.close_con()
 
+        self.logger.debug('_get_history_from_db: exiting function')
         return data
 
 
@@ -92,6 +109,7 @@ class Security():
         False might be returned include data being up to date or the trading day
         not being over.'''
 
+        self.logger.debug('_is_new_data_available: entering function')
 
         today = dt.datetime.today()
         last_date = dt.datetime.fromisoformat(last_date)
@@ -100,24 +118,39 @@ class Security():
 
         # TODO: Unit test these conditions
         if day_of_week == 5 and delta.days <= 1:
+            self.logger.info('_is_new_data_available: today is saturday, data fetched within 24 hours, returning false')
+            self.logger.debug('_is_new_data_available: exiting function')
             return False
         elif day_of_week == 6 and delta.days <= 2:
+            self.logger.info('_is_new_data_available: today is sunday, data fetched within 48 hours, returning false')
+            self.logger.debug('_is_new_data_available: exiting function')
             return False
         elif self._is_holiday() and delta.days <= 1:
+            self.logger.info('_is_new_data_available: today is a holiday, data fetched withing 24 hours, returning false')
+            self.logger.debug('_is_new_data_available: exiting function')
             return False
         elif not self._is_market_closed() and delta.days <= 1:
+            self.logger.info('_is_new_data_available: market is closed for the day, data fetched withing 24 hours, returning false')
+            self.logger.debug('_is_new_data_available: exiting function')
             return False
         elif last_date.date() == today.date():
+            self.logger.info('_is_new_data_available: data was fetched today, returning false')
+            self.logger.debug('_is_new_data_available: exiting function')
             return False
         else:
+            self.logger.info('_is_new_data_available: all fail conditions false, returning true')
+            self.logger.debug('_is_new_data_available: exiting function')
             return True
 
 
     def fetch_updated_data(self) -> None:
+        self.logger.debug('fetch_updated_data: entering function')
         if self.history is not None:
             # we have already history and have the latest date
+            self.logger.debug('fetch_updated_data: retrieving last known date from cached history')
             start_date = self.history.tail(n=1).index[0]
         else:
+            self.logger.debug('fetch_updated_data: retrieving last known date from database')
             # we need to read it from the db
             query = f'SELECT Datetime FROM History WHERE SecurityId = \
             (SELECT SecurityId FROM Securities WHERE SecurityTicker = \'{self.ticker}\')\
@@ -131,9 +164,12 @@ class Security():
 
         # no need to crash the program here, just let the caller know nothing is new
         if not self._is_new_data_available(start_date):
+            # TODO: remove the error from code, return something else
+            self.logger.info('fetch_updated_data: no new data available')
             return NoNewDataError('New data cannot be fetched right now')
         
         try:
+            self.logger.info(f'fetch_updated_data: fetching new data for {self.ticker} from api service with start date {start_date}')
             security = yf.Ticker(self.ticker)
             updated_data = security.history(start=start_date, auto_adjust=False)
             
@@ -151,10 +187,12 @@ class Security():
             updated_data.set_index('Date', inplace=True)
             
             if self.history is not None:
+                self.logger.debug('fetch_updated_data: concatenating fetched history with cached history')
                 # We assume we are looking only at the close data for now
                 # yfinance sets 'Date' as the index for us, no need to reset index here
                 self.history = pd.concat([self.history, updated_data['Close']])
-                
+
+            self.logger.debug('fetch_updated_data: saving fetched history to database')
             # need to save to db
             con = self.database.open_con()
             cur = self.database.open_cur()
@@ -174,12 +212,15 @@ class Security():
             
             
         except Exception as e:
+            self.logger.error('fetch_updated_data: exception raised')
             raise e
 
         finally:
+            self.logger.debug('fetch_updated_data: closing database connection')
             if self.database.is_connection_open():
                 self.database.close_cur()
                 self.database.close_con()
+        self.logger.debug('fetch_updated_data: exiting function')
         
     def __str__(self):
         return f'Instance of Security: {self.ticker}'
